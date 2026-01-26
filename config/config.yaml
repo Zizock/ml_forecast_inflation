@@ -1,0 +1,24 @@
+# ==== Shared settings across models ====
+data_file: "../data/processed_data.csv"
+results_dir: "../results"
+
+random_seed: 42
+target_var: "X1"
+manual_cut_off_date: "2024-01-01"
+
+forecasting_horizon: [1, 3, 6]
+test_size: 6
+max_lag_for_features: 6
+
+# ==== Dataloader ====
+num_workers: 0
+
+# ==== RNN specific ====
+sequence_length_factor: 2   # SEQUENCE_LENGTH = factor * max(horizon)
+
+# ==== Optuna ====
+# GO BACK LATER:
+# set different values for different models if needed
+n_trials: 100
+max_epochs_tune: 200
+max_epochs_refit: 200
