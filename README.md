@@ -36,7 +36,7 @@ The data are expected to be provided in CSV format. Raw inputs are sourced from 
 - **X14**: Industrial production index (base index)
 - **X15**: Monetary base (raw series)
 
-### Monthly series
+### Monthly series (from separate files)
 - **X16**: Tourist arrivals (raw series)
 - **X17**: ESP inflation expectations (%)
 
