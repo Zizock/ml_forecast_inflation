@@ -15,6 +15,8 @@ checkpoints/
 ml_forecast_inflation.Rproj
 
 .DS_Store
+*.DS_Store
+**/.DS_Store
 
 # ==========================================
 # part from Python template
