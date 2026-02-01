@@ -11,10 +11,11 @@ Install the required dependencies:
    pip install -r requirements.txt
    ```
 
-- Run `run_main.py` to train all models and report model comparison metrics.
-- Adjust configurations in `config/my_config.yaml`.
-- Model modules are stored in `src/models`.
-- `old_models` stores old draft scripts.
+### Project structure
+- Run `run_main.py` to import all models and report model comparison metrics.
+- `src/models` stores all model modules.
+- `config/my_config.yaml` stores configurations, open to adjustments.
+- `old_models` stores old draft scripts (not used anymore).
 
 ## Overview
 
