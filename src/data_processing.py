@@ -38,14 +38,18 @@ import pathlib
 import numpy as np
 import pandas as pd
 
-import sys
-sys.path.append("../")
+#import sys
+#sys.path.append("../")
 
 # ==========================================================
 # X16 Tourist arrivals data part
 # Merge tourist arrivals by countries to get total arrivals
 # ==========================================================
-tourist_data_file = pathlib.Path('../data/tourist.csv').resolve()
+# define paths
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+CONFIG_FILE = ROOT / "config" / "my_config.yaml"
+
+tourist_data_file = ROOT / "data" / "tourist.csv"
 raw_tourist_data = pd.read_csv(tourist_data_file, parse_dates=False).fillna(0)
 raw_tourist_data = raw_tourist_data.drop(columns=["Growth Rate(%)"])
 # rename arrivals column
@@ -72,12 +76,12 @@ raw_tourist_data["arrivals"] = pd.to_numeric(raw_tourist_data["arrivals"], error
 # group by date and sum over countries, save to new csv
 grouped_tourist_data = raw_tourist_data.groupby(level="Date")["arrivals"].sum()
 grouped_tourist_data.index.name = "Date"
-grouped_tourist_data.to_csv(pathlib.Path('../data/processed_tourist_arrivals.csv').resolve())
+grouped_tourist_data.to_csv(ROOT / "data" / "processed_tourist_arrivals.csv")
 
 # ==========================================================
 # X17 ESP series from another file
 # ==========================================================
-esp_data_file = pathlib.Path('../data/ESP_inflation_exp.csv').resolve()
+esp_data_file = ROOT / "data" / "ESP_inflation_exp.csv"
 esp_data = pd.read_csv(esp_data_file) # no index column
 # raw dataframe has a year column and a month column: form into Date index
 esp_data["Date"] = pd.to_datetime(
@@ -89,7 +93,7 @@ esp_data = esp_data.set_index("Date").sort_index().drop(columns=["year", "month"
 # ==========================================================
 # Process all other monthly data series
 # ==========================================================
-data_file = pathlib.Path('../data/raw_data.csv').resolve()
+data_file = ROOT / "data" / "raw_data.csv"
 raw_data = pd.read_csv(data_file, index_col=0, parse_dates=True)
 raw_data.index = pd.to_datetime(raw_data.index, format="%b-%y")
 raw_data.index.name = "Date"
@@ -106,7 +110,7 @@ raw_data["X17"] = raw_data["X17"].fillna(0)
 # Add all other quarterly data series
 # ==========================================================
 # read quarterly data
-data_file = pathlib.Path('../data/raw_data_quarter.csv').resolve()
+data_file = ROOT / "data" / "raw_data_quarter.csv"
 raw_data_quarter = pd.read_csv(data_file, index_col=0)
 
 raw_data_quarter.index = ( # deal with the quarter date index
@@ -161,5 +165,5 @@ for col in raw_data.columns:
         processed_data[col] = series_transformed
 
 # ==== save processed data ====
-processed_data_file = pathlib.Path('../data/processed_data.csv').resolve()
+processed_data_file = ROOT / "data" / "processed_data.csv"
 processed_data.to_csv(processed_data_file)

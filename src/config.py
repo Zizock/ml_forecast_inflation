@@ -3,20 +3,21 @@
 import pathlib
 import yaml
 
-# load config
-def load_config():
+# ==== load config ====
+def load_config(cfg_path):
     """
     Go to the repo root and load config/config.yaml
-
+    
     Returns:
         dict: the loaded config
     """
-    repo_root = pathlib.Path(__file__).resolve().parents[1]
-    cfg_path = repo_root / "config" / "config.yaml"
+    cfg_path = pathlib.Path(cfg_path).resolve()
+    #repo_root = pathlib.Path(__file__).resolve().parents[1]
+    #cfg_path = repo_root / "config" / "my_config.yaml"
     with open(cfg_path, "r") as f:
         return yaml.safe_load(f)
 
-# help function to generate path
+# ==== help function to generate path ====
 def repo_path(*parts):
     """
     generate path relative to repo root
@@ -25,5 +26,5 @@ def repo_path(*parts):
     Returns:
         pathlib.Path: the resolved path
     """
-    repo_root = pathlib.Path(__file__).resolve().parents[1]
+    repo_root = pathlib.Path(__file__).resolve().parents[1] # current: root/src/models/config.py
     return repo_root.joinpath(*parts).resolve()

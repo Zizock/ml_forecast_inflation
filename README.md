@@ -1,8 +1,20 @@
 # Inflation Forecasting Project
 
-**Current status:** four models under models/, complete.
+**Current status:** workflow completed
 
-**Working:** integrate into a main runner script
+**Working:** Optimizing model performance
+
+## Setup and Workflow
+
+Install the required dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
+
+- Run `run_main.py` to train all models and report model comparison metrics.
+- Adjust configurations in `config/my_config.yaml`.
+- Model modules are stored in `src/models`.
+- `old_models` stores old draft scripts.
 
 ## Overview
 
@@ -10,7 +22,17 @@ This project extends the IMF Working Paper by Liu et al. (2024) on machine-learn
 
 In the original paper, the authors evaluate LASSO, Elastic Net, Random Forest, and XGBoost models. Among these approaches, LASSO is found to deliver the strongest forecasting performance.
 
-I extend their analysis in two directions. First, I implement a more extensively tuned XGBoost model. Second, I introduce two deep learning approaches: a standard LSTM model and a custom implemented LSTNet architecture. For comparability, I also implement LASSO, the best-performing model in the original study, as well as a classical ARIMA model and a Bayesian VAR, which serve as econometric benchmark models.
+I extend their analysis in two directions. First, I implement a more extensively tuned XGBoost model. Second, I introduce two deep learning approaches: a standard LSTM model and a custom implemented LSTNet architecture. For better comparability, I also implement LASSO, the best-performing model in the original study.
+
+### Current results
+
+Models are trained using MAE loss for robustness. Forecast accuracy is evaluated using out-of-sample RMSE. (currently I also put Huber in tuning)
+
+- **1-month-ahead forecast** `best_model=LSTM`, `best_rmse=0.17`
+- **3-month-ahead forecast** `best_model=XGB`, `best_rmse=0.23`
+- **6-month-ahead forecast** `best_model=LSTM`, `best_rmse=0.39`
+
+But results are not stable. Still tuning.
 
 ## Data Structure
 
@@ -54,14 +76,9 @@ The data are expected to be provided in CSV format. Raw inputs are sourced from 
 For quarterly series, I convert them to monthly frequency using only information available within each month in order to avoid information leakage.
 
 ### Feature transformation
+
 For features that are in percentages, no transformation is needed. For features that are in levels or raw indices, I calculate YoY percentage changes.
 
-### Feature engineering
-For supervised learning models, I construct lagged and differenced features for each variable. In current version, the maximum lag length is set to three months.
+### Feature engineering for supervised models
 
-## Setup and Workflow
-Install the required dependencies:
-   ```
-   pip install -r requirements.txt
-   ```
-Currently, each model is executed independently. The `run_main.py` script will be updated laterfuture to run all models in a single trial.
+For supervised learning models, I construct lagged and differenced features for each variable. In current version, the maximum lag length is set to six months.
