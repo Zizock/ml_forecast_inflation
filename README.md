@@ -1,8 +1,8 @@
 # Inflation Forecasting Project
 
-**Current status:** workflow completed
+**Current status:** pipeline completed
 
-**Working:** Optimizing model performance
+**Ongoing work:** Further tuning and robustness analysis
 
 ## Setup and Workflow
 
@@ -11,11 +11,14 @@ Install the required dependencies:
    pip install -r requirements.txt
    ```
 
+Running `run_main.py` executes the full pipeline.
+
 ### Project structure
-- Run `run_main.py` to import all models and report model comparison metrics.
-- `src/models` stores all model modules.
-- `config/my_config.yaml` stores configurations, open to adjustments.
-- `old_models` stores old draft scripts (not used anymore).
+- `run_main.py`: Entry point. Runs all models, calculates and plots model-comparison evaluation metrics.
+- `src/`: Evaluation and visualization utilities.
+- `src/models/`: Callable forecasting model modules.
+- `config/my_config.yaml`: Central configuration file (data paths, horizons, training settings...).
+- `old_models/`: Archived old draft scripts (kept for reference, not used).
 
 ## Overview
 
@@ -23,21 +26,21 @@ This project extends the IMF Working Paper by Liu et al. (2024) on machine-learn
 
 In the original paper, the authors evaluate LASSO, Elastic Net, Random Forest, and XGBoost models. Among these approaches, LASSO is found to deliver the strongest forecasting performance.
 
-I extend their analysis in two directions. First, I implement a more extensively tuned XGBoost model. Second, I introduce two deep learning approaches: a standard LSTM model and a custom implemented LSTNet architecture. For better comparability, I also implement LASSO, the best-performing model in the original study.
+I extend their analysis in two directions. First, I implement a more extensively tuned XGBoost model. Second, I introduce two deep learning approaches: a standard LSTM model and a custom implementation of the LSTNet architecture. For better comparability, I also reimplement LASSO within the forecasting pipeline.
 
 ### Current results
 
-Models are trained using MAE loss for robustness. Forecast accuracy is evaluated using out-of-sample RMSE. (currently I also put Huber in tuning)
+Models are trained using MSE/RMSE loss. Forecast accuracy is evaluated using out-of-sample RMSE. For DL models, after pinning down hyperparameters, I retrain the model multiple times with different random seeds on the same training data, and average the predictions to reduce optimization variance.
 
-- **1-month-ahead forecast** `best_model=LSTM`, `best_rmse=0.17`
-- **3-month-ahead forecast** `best_model=XGB`, `best_rmse=0.23`
-- **6-month-ahead forecast** `best_model=LSTM`, `best_rmse=0.39`
+Forecast performance is still sensitive to hyperparameter choices and random initialization; further tuning and robustness checks are ongoing.
 
-But results are not stable. Still tuning.
+![RMSE comparison across models](results/figures/rmse_comparison.png)
 
 ## Data Structure
 
-The data are expected to be provided in CSV format. Raw inputs are sourced from several different files and merged during preprocessing. After running the `data_processing.py` script, a single processed CSV file is generated with the following structure:
+**Data are available upon request**
+
+The data are expected to be provided in CSV format. Raw inputs are sourced from multiple files and merged during preprocessing. After running the `data_processing.py` script, a single processed CSV file is generated with the following structure:
 
 - **`Date`**: Date column
 - **`X1–X24`**: Time series variables (see the list below for detailed descriptions)
@@ -82,4 +85,4 @@ For features that are in percentages, no transformation is needed. For features 
 
 ### Feature engineering for supervised models
 
-For supervised learning models, I construct lagged and differenced features for each variable. In current version, the maximum lag length is set to six months.
+For supervised learning models, I construct lagged and differenced features for each variable. In the current version, the maximum lag length is set to six months.

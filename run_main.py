@@ -5,11 +5,17 @@
 from __future__ import annotations
 from pathlib import Path
 
+# models
 from src.models.module_lasso import run as run_lasso
 from src.models.module_xgb import run as run_xgb
 from src.models.module_lstm import run as run_lstm
 from src.models.module_lstnet import run as run_lstnet
+
+# evaluation module
 from src.evaluation import run as run_eval
+
+# graphing module
+from src.graphrmse import run as run_graph
 
 # ==== define paths ====
 ROOT = Path(__file__).resolve().parent
@@ -21,25 +27,30 @@ MODEL_DICT = {
     "xgb": run_xgb,
     "lstm": run_lstm,
     "lstnet": run_lstnet,
-    "evaluation": run_eval, # evaluation cycle
 }
 
 # ==== main function ====
 def main(config_path=CONFIG_FILE):
     results = []
 
+    # run models
     for model_name, run_func in MODEL_DICT.items():
-        print(f"\n==== Running model: {model_name} ====")
+        print( f"\n==== Running model: {model_name} ====" )
         result = run_func(config_path)
         results.append(result)
-        print(f"==== Finished model: {model_name} ====\n")
+        print( f"==== Finished model: {model_name} ====\n" )
+    print(results)
+    print( "\n==== All models done ====" )
 
-    print("\n==== All models done ====")
-    for r in results:
-        if "combined_csv" in r:
-            print(r["model"], "->", r["combined_csv"]) # name of the combined csv file
-        else:
-            print(r["model"], "->", r["result_dir"]) # path to result dir
+    # run evaluation
+    print( "\n==== Running evaluation ====" )
+    run_eval(config_path)
+    print( "==== Finished evaluation ====\n" )
+
+    # run graphing
+    print( "\n==== Drawing graph ====" )
+    run_graph(config_path)
+    print( "==== Saved graph ====\n" )
 
 # ==== entry point ====
 if __name__ == "__main__":

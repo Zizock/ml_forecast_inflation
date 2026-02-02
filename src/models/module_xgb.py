@@ -1,5 +1,5 @@
 # ==========================================================
-# A callcable XGBoost module for time series forecasting
+# XGBoost module for time series forecasting
 # ==========================================================
 # This script does the following:
 # for a given back testing length,
@@ -173,7 +173,7 @@ def make_pipeline(num_X_columns : list[str], # a list of numeric feature column 
         objective="reg:squarederror",
         random_state=seed,
         enable_categorical=True,
-        eval_metric="mae",
+        eval_metric="rmse",
         n_jobs=1, # I use -1 in cross_val_score to use all cores, here set to 1
     )
 
@@ -197,8 +197,8 @@ def tune_hyperparams_optuna(
     seed : int = 42,
     ) -> tuple[dict, float]:
     """
-    Tune hps with optuna using TimeSeriesSplit CV on MAE.
-    Returns (best_params_dict_for_pipeline, best_mae)
+    Tune hps with optuna using TimeSeriesSplit CV on RMSE.
+    Returns (best_params_dict_for_pipeline, best_rmse)
     """
     tscv = TimeSeriesSplit(n_splits=n_splits)
 
@@ -229,19 +229,19 @@ def tune_hyperparams_optuna(
             X,
             y,
             cv=tscv,
-            scoring="neg_mean_absolute_error",
+            scoring="neg_root_mean_squared_error",
             n_jobs=-1,
         )
-        return -scores.mean() # convert to positive MAE
+        return -scores.mean() # convert to positive RMSE
 
     # define and start the study
     sampler = optuna.samplers.TPESampler(seed=seed)
     study = optuna.create_study(direction="minimize", sampler=sampler)
     study.optimize(objective, n_trials=n_trials)
 
-    best_mae = study.best_value
+    best_rmse = study.best_value
     best_params_for_pipeline = {f"regressor__{k}": v for k, v in study.best_params.items()}
-    return best_params_for_pipeline, best_mae
+    return best_params_for_pipeline, best_rmse
 
 # ==========================================================
 # Back testing
@@ -303,7 +303,7 @@ def run_one_horizon(data_features : pd.DataFrame,
     y = train_val_data[Y_column].squeeze() # make it a 1d array
 
     # hyperparameter tuning
-    best_params, best_mae = tune_hyperparams_optuna(
+    best_params, best_rmse = tune_hyperparams_optuna(
         pipeline=pipeline,
         X=X,
         y=y,
@@ -335,7 +335,7 @@ def run_one_horizon(data_features : pd.DataFrame,
         index=pred_index, # forcely use correct index matching the original data
     )
 
-    print(f"[{cfg.model_name}] h={h}: best CV MAE={best_mae:.6f}")
+    print(f"[{cfg.model_name}] h={h}: best CV RMSE={best_rmse:.6f}")
     return out
 
 # ==========================================================

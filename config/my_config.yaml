@@ -24,3 +24,5 @@ sequence_length_factor: 2 # SEQUENCE_LENGTH = factor * max(horizon)
 n_trials: 100
 max_epochs_tune: 200
 max_epochs_refit: 200
+
+n_refit_runs: 10

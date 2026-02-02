@@ -1,5 +1,5 @@
 # ==========================================================
-# A callable LSTNet module for time series forecasting
+# LSTNet module for time series forecasting
 # ==========================================================
 # This script does the following:
 # define an LSTNet layer,
@@ -16,6 +16,8 @@ from dataclasses import dataclass
 import pathlib
 import numpy as np
 import pandas as pd
+
+from sklearn.preprocessing import StandardScaler
 
 import torch
 from torch.utils.data import DataLoader, Dataset
@@ -40,7 +42,6 @@ class config_lstnet:
     model_name: str
     result_root: pathlib.Path
     data_file: pathlib.Path
-    random_seed: int
 
     manual_cut_off_date: pd.Timestamp
 
@@ -56,6 +57,7 @@ class config_lstnet:
     max_epochs_tune: int
     max_epochs_refit: int
     num_workers: int
+    n_refit_runs: int
 
 # ==== build config dataclass for LSTNet ====
 def build_config_lstnet(config_path : pathlib.Path) -> config_lstnet:
@@ -78,6 +80,7 @@ def build_config_lstnet(config_path : pathlib.Path) -> config_lstnet:
         max_epochs_tune=int(my_config["max_epochs_tune"]),
         max_epochs_refit=int(my_config["max_epochs_refit"]),
         num_workers=int(my_config["num_workers"]),
+        n_refit_runs=int(my_config.get("n_refit_runs", 5)),
     )
 
 # ==========================================================
@@ -105,6 +108,40 @@ def split_train_test(df : pd.DataFrame,
     test_data = df.iloc[-test_size:]
 
     return df, train_val_data, train_data, val_data, test_data
+
+# ==========================================================
+# Feature scaling tools
+# ==========================================================
+def fit_scaler(train_df: pd.DataFrame) -> StandardScaler:
+    """
+    Scale on train_data only.
+    """
+    scaler = StandardScaler()
+    scaler.fit(train_df.values)
+    return scaler
+
+def transform_df(df: pd.DataFrame,
+                 scaler: StandardScaler
+) -> pd.DataFrame:
+    """
+    Transform function that applies scaler to df
+    """
+    arr = scaler.transform(df.values)
+    return pd.DataFrame(arr, index=df.index, columns=df.columns)
+
+def inverse_transform_target(y_scaled: np.ndarray | pd.Series,
+                             scaler: StandardScaler,
+                             columns: list[str],
+                             target_var: str,
+) -> np.ndarray:
+    """
+    Invert back only the forecast target column to raw scale
+    """
+    j = columns.index(target_var)
+    mean = scaler.mean_[j]
+    std = scaler.scale_[j]
+    y_scaled = np.asarray(y_scaled, dtype=float)
+    return y_scaled * std + mean
 
 # ==========================================================
 # Build sliding fixed window dataset class for horizon h
@@ -140,9 +177,15 @@ class SlidingFixedWindow(Dataset):
                 dtype=torch.float)
         )
 
-# and a make_loaders function for each horizon h, and each batch_size during tuning
-def make_loaders(train_df, train_val_df, h, batch_size,
-                 sequence_length, target_var, test_size, num_workers):
+# ==== and a make_loaders function for each horizon h and each batch_size during tuning ====
+def make_loaders(train_df : pd.DataFrame,
+                 train_val_df: pd.DataFrame,
+                 h: int,
+                 batch_size: int,
+                 sequence_length: int,
+                 target_var: str,
+                 test_size: int,
+                 num_workers: int):
     """
     place holder. add docstring later if I feel needed
     """
@@ -300,7 +343,7 @@ class LSTNet_Lightning(L.LightningModule):
 
         learning_rate (float): starting learning rate for Adam optimizer
         weight_decay (float): weight decay for AdamW optimizer
-        loss_name (str): loss function to use, either "mae" or "huber" (I use mae here, maybe try huber later)
+        loss_name (str): loss function to use, either "mse" or "huber" (I use mse here, maybe try huber later)
     """
     def __init__(
         self,
@@ -320,7 +363,7 @@ class LSTNet_Lightning(L.LightningModule):
         # training
         learning_rate = 1e-3,
         weight_decay = 0.0,
-        loss_name : str = "mae",
+        loss_name : str = "mse",
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -346,7 +389,7 @@ class LSTNet_Lightning(L.LightningModule):
         if loss_name == "huber": # not activated yet
             self.loss_fn = nn.SmoothL1Loss(beta=1.0)
         else:
-            self.loss_fn = nn.L1Loss()
+            self.loss_fn = nn.MSELoss()
 
     def forward(self, X):
         return self.LSTNet(X)
@@ -354,15 +397,17 @@ class LSTNet_Lightning(L.LightningModule):
     def training_step(self, batch, batch_idx):
         X, y = batch
         yhat = self(X)
-        loss = self.loss_fn(yhat, y)
-        self.log("train_loss", loss, prog_bar=True)
+        loss = self.loss_fn(yhat, y) # MSE loss
+        rmse = torch.sqrt(loss)
+        self.log("train_rmse", rmse, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         X, y = batch
         yhat = self(X)
         loss = self.loss_fn(yhat, y)
-        self.log("val_loss", loss, prog_bar=True)
+        rmse = torch.sqrt(loss)
+        self.log("val_rmse", rmse, prog_bar=True)
         return loss
 
     # added AdamW and try a w_d=0, which is equivalent to Adam
@@ -405,8 +450,10 @@ def tune_with_optuna(train_df : pd.DataFrame,
         study.best_params (a dict)
     """
     def objective(trial):
+        seed_everything(random_seed + trial.number, workers=True)
+
         # training hyperparams
-        batch_size    = trial.suggest_categorical("batch_size", [8, 12, 16, 20, 24])
+        batch_size    = trial.suggest_categorical("batch_size", [8, 12, 16, 20, 24, 32, 48, 64])
         learning_rate = trial.suggest_float("learning_rate", 1e-5, 3e-3, log=True)
 
         # try both Adam(wd=0) and AdamW
@@ -421,7 +468,7 @@ def tune_with_optuna(train_df : pd.DataFrame,
             weight_decay = 0.0
         
         grad_clip = trial.suggest_float("grad_clip", 0.5, 5.0)
-        loss_name = trial.suggest_categorical("loss", ["mae", "huber"])
+        loss_name = trial.suggest_categorical("loss", ["mse"]) # leave huber for later
 
         # architecture hyperparams
         dropout = trial.suggest_float("dropout", 0.0, 0.5)
@@ -429,8 +476,8 @@ def tune_with_optuna(train_df : pd.DataFrame,
 
         n_out_channels         = trial.suggest_categorical("n_out_channels", [8, 16, 32, 64])
         window_size            = trial.suggest_categorical("window_size", [2, 3, 4, 6])
-        hidden_state_dims_GRU1 = trial.suggest_categorical("hidden_state_dims_GRU1", [16, 32, 64, 128])
-        hidden_state_dims_GRU2 = trial.suggest_categorical("hidden_state_dims_GRU2", [8, 16, 32, 64])
+        hidden_state_dims_GRU1 = trial.suggest_categorical("hidden_state_dims_GRU1", [16, 32, 64, 128, 256, 512])
+        hidden_state_dims_GRU2 = trial.suggest_categorical("hidden_state_dims_GRU2", [16, 32, 64, 128, 256, 512])
 
         # attention only used when skip==0; embed_dim must be divisible by heads
         if skip == 0:
@@ -466,8 +513,8 @@ def tune_with_optuna(train_df : pd.DataFrame,
         )
 
         callbacks = [
-            EarlyStopping(monitor="val_loss", mode="min", patience=10, verbose=False),
-            PyTorchLightningPruningCallback(trial, monitor="val_loss"),
+            EarlyStopping(monitor="val_rmse", mode="min", patience=10, verbose=False),
+            PyTorchLightningPruningCallback(trial, monitor="val_rmse"),
         ]
 
         trainer = L.Trainer(
@@ -484,7 +531,7 @@ def tune_with_optuna(train_df : pd.DataFrame,
 
         trainer.fit(model, train_loader, val_loader)
 
-        val = trainer.callback_metrics.get("val_loss")
+        val = trainer.callback_metrics.get("val_rmse")
 
         # a quick check to avoid returning None or nan to optuna
         if val is None:
@@ -514,7 +561,8 @@ def refit_best_model(train_val_df : pd.DataFrame,
                      sequence_length: int,
                      target_var: str,
                      max_epochs_refit: int,
-                     random_seed: int,):
+                     random_seed: int,
+):
 
     seed_everything(random_seed, workers=True)
 
@@ -556,7 +604,7 @@ def refit_best_model(train_val_df : pd.DataFrame,
         save_top_k=1,
         monitor=None, # nothing ot monitor because no val_loader
         save_last=True, # keep last.ckpt
-        filename=f"last-h{h}" + "-{epoch:03d}",
+        filename=f"last-h{h}-seed{random_seed}" + "-{epoch:03d}",
     )
 
     final_trainer = L.Trainer(
@@ -610,18 +658,25 @@ def refit_best_model(train_val_df : pd.DataFrame,
 # ==========================================================
 def forecast_on_test(df_h : pd.DataFrame,
                      test_df: pd.DataFrame,
+                     test_df_raw: pd.DataFrame,
                      model : LSTNet_Lightning,
                      h: int,
                      sequence_length: int,
-                     target_var: str,):
+                     target_var: str,
+                     scaler: StandardScaler,
+                     columns: list[str],
+):
     """
     Args:
-        df_h: the entire dataset (DF)
-        test_df: test data (DF)
+        df_h: the entire dataset
+        test_df: test data
+        test_df_raw: raw scale test data
         model: best LSTNet model from refitting
         h: forecasting horizon
         sequence_length: length of input sequences
         target_var: target variable column name in string
+        scaler: fitted StandardScaler
+        columns: list of column names in the original df
     """
     model.eval()
     device = next(model.parameters()).device
@@ -642,15 +697,58 @@ def forecast_on_test(df_h : pd.DataFrame,
 
     preds = torch.tensor(preds) # convert a list of multiple tensors to a single tensor
 
+    # inverse transform to raw scale
+    preds_raw = inverse_transform_target(preds, scaler, columns, target_var)
+    true_raw = test_df_raw[target_var].to_numpy(dtype=float)
+
     final_out = pd.DataFrame(
         {
-            f"{target_var}-pred-h{h}": np.asarray(preds), # predicted values converted to numpy array
-            f"{target_var}-true-h{h}": np.asarray(test_df[target_var])
+            f"{target_var}-pred-h{h}": np.asarray(preds_raw), # predicted values converted to numpy array
+            f"{target_var}-true-h{h}": np.asarray(true_raw)
         },
-        index=test_df.index
+        index=test_df_raw.index
     )
     final_out.index.name = "Date"
     return final_out
+
+# ==========================================================
+# A helper function to average across refits
+# ==========================================================
+def average_refit_predictions(list_of_dfs: list[pd.DataFrame],
+                              target_var: str,
+                              h: int,
+) -> pd.DataFrame:
+    """
+    Average predictions across multiple runs for a given horizon.
+    Expects each df to have columns: {target_var}-pred-h{h}, {target_var}-true-h{h}
+    Index must match across dfs.
+    """
+    if len(list_of_dfs) == 0:
+        raise ValueError("No prediction DataFrames provided for averaging.")
+
+    pred_col = f"{target_var}-pred-h{h}"
+    true_col = f"{target_var}-true-h{h}"
+
+    # sanity checks
+    idx0 = list_of_dfs[0].index
+    for i, d in enumerate(list_of_dfs):
+        if not d.index.equals(idx0):
+            raise ValueError(f"Index mismatch in run {i} for horizon h={h}.")
+        if pred_col not in d.columns or true_col not in d.columns:
+            raise ValueError(f"Missing required columns in run {i} for horizon h={h}.")
+
+    pred_stack = np.vstack([d[pred_col].to_numpy(dtype=float) for d in list_of_dfs])
+    pred_mean = pred_stack.mean(axis=0)
+
+    out = pd.DataFrame(
+        {
+            pred_col: pred_mean,
+            true_col: list_of_dfs[0][true_col].to_numpy(dtype=float),
+        },
+        index=idx0,
+    )
+    out.index.name = "Date"
+    return out
 
 # ==========================================================
 # Main function to run all horizons
@@ -660,6 +758,9 @@ def run(config_path="my_config.yaml"):
     # load config
     cfg = build_config_lstnet(config_path)
 
+    n_refit_runs = cfg.n_refit_runs
+    refit_seeds = [cfg.random_seed + i for i in range(n_refit_runs)]
+
     data = pd.read_csv(cfg.data_file, index_col=0, parse_dates=True)
 
     df, train_val_data, train_data, val_data, test_data = split_train_test(data,
@@ -667,6 +768,19 @@ def run(config_path="my_config.yaml"):
                                                                        cfg.test_size,
     )
     
+    # scaling steps
+    scaler = fit_scaler(train_data)
+
+    # preserve the test set for later use
+    test_data_raw = test_data.copy()
+
+    # scale every subset by the train set scale
+    df = transform_df(df, scaler)
+    train_val_data = transform_df(train_val_data, scaler)
+    train_data = transform_df(train_data, scaler)
+    val_data = transform_df(val_data, scaler)
+    test_data = transform_df(test_data, scaler)
+
     max_h = max(cfg.forecasting_horizon)
     sequence_length = cfg.sequence_length_factor * max_h
     target_idx = df.columns.get_loc(cfg.target_var)
@@ -675,6 +789,7 @@ def run(config_path="my_config.yaml"):
 
     all_out = []
     for h in cfg.forecasting_horizon:
+
         best_hps = tune_with_optuna(train_df = train_data,
                                     train_val_df = train_val_data,
                                     h = int(h),
@@ -688,27 +803,40 @@ def run(config_path="my_config.yaml"):
                                     test_size= cfg.test_size,
         )
 
-        model, _ = refit_best_model(train_val_df = train_val_data,
-                                    h = int(h),
-                                    target_idx = target_idx,
-                                    sequence_length = sequence_length,
-                                    target_var = cfg.target_var,
-                                    random_seed= cfg.random_seed,
-                                    max_epochs_refit = cfg.max_epochs_refit,
-                                    best_hps = best_hps,
-        )
+        # once got best hps, refit int(n_refit_runs) times and average predictions
+        per_run_outs: list[pd.DataFrame] = [] # initiate container
+        for seed in refit_seeds:
+            model, _ = refit_best_model(train_val_df = train_val_data,
+                                        h = int(h),
+                                        target_idx = target_idx,
+                                        sequence_length = sequence_length,
+                                        target_var = cfg.target_var,
+                                        random_seed= seed,
+                                        max_epochs_refit = cfg.max_epochs_refit,
+                                        best_hps = best_hps,
+            )
 
-        out_h = forecast_on_test(df_h = df,
-                                 test_df = test_data,
-                                 model = model,
-                                 h = int(h),
-                                 sequence_length = sequence_length,
-                                 target_var = cfg.target_var,
+            out_h_seed = forecast_on_test(df_h = df,
+                                        test_df = test_data,
+                                        test_df_raw = test_data_raw,
+                                        model = model,
+                                        h = int(h),
+                                        sequence_length = sequence_length,
+                                        target_var = cfg.target_var,
+                                        scaler = scaler,
+                                        columns = df.columns.to_list(),
+            )
+            per_run_outs.append(out_h_seed)
+        
+        # average across refit runs
+        out_h_avg = average_refit_predictions(per_run_outs,
+                                              target_var = cfg.target_var,
+                                              h = int(h),
         )
 
         out_path = cfg.result_root / f"{cfg.model_name}_predictions_h{h}.csv"
-        out_h.to_csv(out_path, index=True)
-        all_out.append(out_h)
+        out_h_avg.to_csv(out_path, index=True)
+        all_out.append(out_h_avg)
 
     combined = pd.concat(all_out, axis=1)
     combined_path = cfg.result_root / f"{cfg.model_name}_predictions_all_horizons.csv"
