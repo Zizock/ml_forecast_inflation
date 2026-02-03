@@ -46,34 +46,32 @@ The data are expected to be provided in CSV format. Raw inputs are sourced from 
 - **`X1–X24`**: Time series variables (see the list below for detailed descriptions)
 
 ### Monthly series
-- **X1**: Inflation (base index)
-- **X2**: USD–JPY exchange rate (raw series)
-- **X3**: Chained PPI (YoY % change)
-- **X4**: PPI index (base index)
-- **X5**: SPPI (YoY % change)
-- **X6**: Import price index (base index)
-- **X7**: Import energy price index (base index)
-- **X8**: Nikkei 225 index (raw series)
-- **X9**: Unemployment rate (%)
-- **X10**: Household income (YoY % change)
-- **X11**: Consumption activity index (base index)
-- **X12**: Shadow interest rate (%)
-- **X13**: Loan size (raw series)
-- **X14**: Industrial production index (base index)
-- **X15**: Monetary base (raw series)
-
-### Monthly series (from separate files)
-- **X16**: Tourist arrivals (raw series)
-- **X17**: ESP inflation expectations (%)
+- **X1**: CPI Inflation
+- **X2**: USD–JPY exchange rate
+- **X3**: Chained PPI index
+- **X4**: PPI index
+- **X5**: Service PPI index
+- **X6**: Import price index
+- **X7**: Import energy price index
+- **X8**: Nikkei 225 index
+- **X9**: Unemployment rate
+- **X10**: Household total income
+- **X11**: Consumption activity index
+- **X12**: Shadow interest rate
+- **X13**: Total loan size
+- **X14**: Industrial production index
+- **X15**: Monetary base
+- **X16**: Tourist arrivals
+- **X17**: ESP inflation expectations
 
 ### Quarterly series
-- **X18**: Tankan output price change (net percentage responses)
-- **X19**: Tankan input price change (net percentage responses)
-- **X20**: Real GDP (raw series)
-- **X21**: BOJ output gap (%)
-- **X22**: Household disposable income (YoY % change)
-- **X23**: Government consumption (raw series)
-- **X24**: Government investment (raw series)
+- **X18**: Tankan survey output price change
+- **X19**: Tankan survey input price change
+- **X20**: Real GDP
+- **X21**: BOJ calcuated output gap
+- **X22**: Household disposable income
+- **X23**: Government consumption
+- **X24**: Government investment
 
 ### Converting quarterly date to monthly frequency
 
@@ -81,7 +79,7 @@ For quarterly series, I convert them to monthly frequency using only information
 
 ### Feature transformation
 
-For features that are in percentages, no transformation is needed. For features that are in levels or raw indices, I calculate YoY percentage changes.
+All features are in, or converted to pertentages. For features that are in percentages, no transformation is needed. For features that are in levels or raw indices, I calculate YoY percentage changes.
 
 ### Feature engineering for supervised models
 
